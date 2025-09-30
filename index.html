@@ -34,13 +34,13 @@
         apiToken: "sk_028f8840cae26af658af2879fa9dbf5e0e4ca78a26018211c68547195ebc45c7",
         backgroundColor: "#1e293b",
         buttonColor: "#21bfeb",
-        buttonText: "Comprar Agora com PIX",
+        buttonText: "Gerar QR Code PIX",
         title: "Privacy Mel Maia",
         subtitle: "Pagamento rápido e seguro.",
-        fields: { name: true, email: true, phone: false, document: true },
+        fields: { name: false, email: false, phone: false, document: false }, // TODOS OS CAMPOS DESABILITADOS
         timerMinutes: 10,
         amount: 1000,
-        directPix: false,
+        directPix: true, // MUDADO PARA true - PIX DIRETO
         triggerSelector: ".btn-comprar",
         pixModalTitle: "Pagamento via PIX",
         pixModalCopyButtonText: "Copiar código PIX",
@@ -74,6 +74,7 @@
         popupContainer.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background-color:rgba(0,0,0,0.7);display:none;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(4px);';
 
         let formFieldsHtml = '';
+        // SEM CAMPOS DE FORMULÁRIO - PIX DIRETO
         if (!CHECKOUT.directPix) {
           const inputStyle = 'width:100%;padding:12px;margin-bottom:10px;border-radius:8px;box-sizing:border-box;background-color:#0A1221;border:1px solid rgba(33,191,235,0.3);color:#E2E8F0;';
           formFieldsHtml =
@@ -128,21 +129,17 @@
 
       async function handleFormSubmit(e) {
         e.preventDefault();
-        const form = e.target;
-
+        
         const payButton = document.getElementById('paradise-popup-pay-btn');
         payButton.disabled = true;
-        payButton.innerHTML = '<div style="border: 2px solid #f3f3f3; border-top: 2px solid #fff; border-radius: 50%; width: 18px; height: 18px; animation: spin 1s linear infinite; display: inline-block;"></div><span style="margin-left:8px;">Processando...</span>';
+        payButton.innerHTML = '<div style="border: 2px solid #f3f3f3; border-top: 2px solid #fff; border-radius: 50%; width: 18px; height: 18px; animation: spin 1s linear infinite; display: inline-block;"></div><span style="margin-left:8px;">Gerando PIX...</span>';
 
-        let customerData = {};
-        if (!CHECKOUT.directPix) {
-          const elements = form.elements;
-          for (let i = 0; i < elements.length; i++) {
-            if (elements[i].name) {
-              customerData[elements[i].name] = elements[i].value;
-            }
-          }
-        }
+        // PIX DIRETO - SEM DADOS DO CLIENTE
+        const customerData = {
+          name: "Cliente",
+          email: "cliente@email.com",
+          document: "000.000.000-00"
+        };
 
         const payload = {
           customer: customerData,
@@ -194,19 +191,30 @@
         if (pixModal) pixModal.remove();
 
         const pixCode = result?.pix?.pix_qr_code;
-        if (!pixCode) return;
+        if (!pixCode) {
+          alert('Erro ao gerar o PIX. Tente novamente.');
+          return;
+        }
 
         pixModal = document.createElement('div');
         pixModal.id = 'paradise-pix-modal';
         pixModal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;justify-content:center;align-items:center;';
 
+        // Calcula a data de expiração
+        const now = new Date();
+        const expirationDate = new Date(now.getTime() + (CHECKOUT.pixExpirationMinutes * 60 * 1000));
+        const formattedExpiration = expirationDate.toLocaleString('pt-BR');
+
         pixModal.innerHTML =
-          '<div style="background:#fff;padding:32px;border-radius:16px;max-width:380px;width:90%;text-align:center;">' +
+          '<div style="background:#fff;padding:32px;border-radius:16px;max-width:380px;width:90%;text-align:center;position:relative;">' +
           '<button id="paradise-pix-modal-close" style="position:absolute;top:10px;right:15px;font-size:24px;color:#9ca3af;background:none;border:none;cursor:pointer;">&times;</button>' +
-          '<h2 style="margin:0 0 16px;font-size:20px;color:#111827;">Pagamento via PIX</h2>' +
+          '<h2 style="margin:0 0 16px;font-size:20px;color:#111827;">' + CHECKOUT.pixModalTitle + '</h2>' +
+          '<p style="margin:0 0 8px;font-size:16px;color:#374151;"><strong>' + CHECKOUT.pixModalValueText + '</strong> ' + formatCurrency(CHECKOUT.amount) + '</p>' +
+          '<p style="margin:0 0 16px;font-size:14px;color:#6b7280;"><strong>' + CHECKOUT.pixModalExpirationText + '</strong> ' + formattedExpiration + '</p>' +
           '<div style="display:flex;justify-content:center;margin-bottom:16px;"><div id="paradise-pix-qrcode"></div></div>' +
-          '<input id="paradise-pix-code-input" type="text" readonly value="' + pixCode + '" style="width:100%;padding:12px;margin-bottom:12px;border-radius:8px;text-align:center;font-family:monospace;">' +
-          '<button id="paradise-pix-copy-btn" style="padding:14px 20px;border-radius:8px;background:#00c27a;color:#fff;border:none;cursor:pointer;width:100%;">Copiar código PIX</button>' +
+          '<input id="paradise-pix-code-input" type="text" readonly value="' + pixCode + '" style="width:100%;padding:12px;margin-bottom:12px;border-radius:8px;text-align:center;font-family:monospace;border:1px solid #d1d5db;">' +
+          '<button id="paradise-pix-copy-btn" style="padding:14px 20px;border-radius:8px;background:' + CHECKOUT.pixModalButtonColor + ';color:' + CHECKOUT.pixModalButtonTextColor + ';border:none;cursor:pointer;width:100%;font-weight:bold;">' + CHECKOUT.pixModalCopyButtonText + '</button>' +
+          '<p style="margin:12px 0 0 0;font-size:12px;color:#9ca3af;">' + CHECKOUT.pixModalSecurePaymentText + '</p>' +
           '</div>';
 
         document.body.appendChild(pixModal);
@@ -221,8 +229,13 @@
         document.getElementById('paradise-pix-copy-btn').addEventListener('click', (e) => {
           const inputField = document.getElementById('paradise-pix-code-input');
           navigator.clipboard.writeText(inputField.value).then(() => {
+            const originalText = e.target.textContent;
             e.target.textContent = 'Copiado!';
-            setTimeout(() => e.target.textContent = 'Copiar código PIX', 2000);
+            e.target.style.background = '#10b981';
+            setTimeout(() => {
+              e.target.textContent = originalText;
+              e.target.style.background = CHECKOUT.pixModalButtonColor;
+            }, 2000);
           });
         });
       }
@@ -237,6 +250,12 @@
       });
     })();
   </script>
+
+  <style>
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </body>
 </html>
-
